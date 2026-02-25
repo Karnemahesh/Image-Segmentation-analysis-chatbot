@@ -74,3 +74,4 @@ if st.session_state.active_image is not None:
     with col2:
         st.subheader("Generated Description")
         st.write(img_obj["description"])
+
