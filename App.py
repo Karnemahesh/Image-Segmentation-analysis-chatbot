@@ -17,7 +17,8 @@ except KeyError:
     st.stop()
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel("gemini-1.5-flash-latest")
+# model = genai.GenerativeModel("gemini-1.5-flash-latest")
+model = genai.GenerativeModel("gemini-1.0-pro")
 
 # ---------------- SESSION STATE ----------------
 if "images" not in st.session_state:
@@ -137,4 +138,5 @@ if user_msg := st.chat_input("Type your message..."):
         bot_reply = safe_generate_content(user_msg)
 
     st.session_state.chat_history.append(("Bot", bot_reply))
+
 
