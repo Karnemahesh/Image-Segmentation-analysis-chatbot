@@ -1,74 +1,40 @@
 import streamlit as st
-import requests
+from huggingface_hub import InferenceClient
 import io
 
-st.set_page_config(
-    page_title="Multi-Image Chat (HuggingFace)",
-    layout="wide"
-)
+st.set_page_config(page_title="Image Captioning (HF SDK)", layout="wide")
 
-# ---------- READ HF API KEY ----------
+# -------- READ TOKEN --------
 try:
     HF_API_KEY = st.secrets["huggingface"]["HF_API_KEY"]
 except KeyError:
     st.error("HF_API_KEY not found in Streamlit Secrets.")
     st.stop()
 
-API_URL = "https://router.huggingface.co/hf-inference/models/Salesforce/blip-image-captioning-base"
+# -------- CREATE CLIENT --------
+client = InferenceClient(
+    model="Salesforce/blip-image-captioning-base",
+    token=HF_API_KEY
+)
 
-headers = {
-    "Authorization": f"Bearer {HF_API_KEY}",
-    "Content-Type": "application/octet-stream"
-}
-
-# ---------- SESSION STATE ----------
+# -------- SESSION STATE --------
 if "images" not in st.session_state:
     st.session_state.images = []
 
 if "active_image" not in st.session_state:
     st.session_state.active_image = None
 
-# ---------- SAFE IMAGE DESCRIPTION ----------
+# -------- IMAGE DESCRIPTION --------
 def describe_image(image_bytes):
     try:
-        response = requests.post(
-            API_URL,
-            headers=headers,
-            data=image_bytes,
-            timeout=30
-        )
+        result = client.image_to_text(image_bytes)
+        return result[0]["generated_text"]
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-        # If model is loading
-        if response.status_code == 503:
-            return "⏳ Model is loading... Please try again in a few seconds."
-
-        # If rate limited or error
-        if response.status_code != 200:
-            return f"❌ API Error {response.status_code}: {response.text}"
-
-        try:
-            result = response.json()
-        except Exception:
-            return "❌ Invalid response received from API."
-
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get("generated_text", "No description generated.")
-
-        if isinstance(result, dict) and "error" in result:
-            return f"⚠️ {result['error']}"
-
-        return "⚠️ Unexpected API response."
-
-    except requests.exceptions.Timeout:
-        return "⏰ Request timed out. Please try again."
-
-    except requests.exceptions.RequestException as e:
-        return f"❌ Network error: {str(e)}"
-
-
-# ---------- SIDEBAR ----------
+# -------- SIDEBAR --------
 with st.sidebar:
-    st.header("📂 Upload Images")
+    st.header("Upload Images")
 
     uploaded_files = st.file_uploader(
         "Upload images",
@@ -80,29 +46,25 @@ with st.sidebar:
         for file in uploaded_files:
             img_bytes = file.read()
 
-            # Avoid duplicate uploads
-            if not any(img["name"] == file.name for img in st.session_state.images):
+            with st.spinner("Generating description..."):
+                description = describe_image(img_bytes)
 
-                with st.spinner("Generating description..."):
-                    description = describe_image(img_bytes)
+            st.session_state.images.append({
+                "name": file.name,
+                "data": img_bytes,
+                "description": description
+            })
 
-                st.session_state.images.append({
-                    "name": file.name,
-                    "data": img_bytes,
-                    "description": description
-                })
+            st.session_state.active_image = len(st.session_state.images) - 1
 
-                st.session_state.active_image = len(st.session_state.images) - 1
-
-    st.markdown("### 🖼 Uploaded Images")
+    st.markdown("### Uploaded Images")
 
     for idx, img in enumerate(st.session_state.images):
         if st.button(img["name"], key=f"img-{idx}"):
             st.session_state.active_image = idx
 
-
-# ---------- MAIN ----------
-st.title("🖼 Image Description App (Free Hugging Face API)")
+# -------- MAIN --------
+st.title("Free Image Captioning App")
 
 if st.session_state.active_image is not None:
     img_obj = st.session_state.images[st.session_state.active_image]
@@ -115,4 +77,3 @@ if st.session_state.active_image is not None:
     with col2:
         st.subheader("Generated Description")
         st.write(img_obj["description"])
-
