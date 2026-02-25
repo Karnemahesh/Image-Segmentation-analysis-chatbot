@@ -14,7 +14,7 @@ except KeyError:
     st.error("HF_API_KEY not found in Streamlit Secrets.")
     st.stop()
 
-API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
+API_URL = "https://router.huggingface.co/hf-inference/models/Salesforce/blip-image-captioning-base"
 
 headers = {
     "Authorization": f"Bearer {HF_API_KEY}",
@@ -115,3 +115,4 @@ if st.session_state.active_image is not None:
     with col2:
         st.subheader("Generated Description")
         st.write(img_obj["description"])
+
