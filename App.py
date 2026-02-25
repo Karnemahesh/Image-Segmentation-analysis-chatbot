@@ -1,7 +1,10 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from google.api_core.exceptions import ResourceExhausted
 import io
+import google.generativeai as genai
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # --- CONFIG ---
 st.set_page_config(page_title="Multi-Image Chat with Gemini", layout="wide")
@@ -113,3 +116,4 @@ if user_msg := st.chat_input("Type your message..."):
         bot_reply = safe_generate_content(user_msg)
 
     st.session_state.chat_history.append(("Bot", bot_reply))
+
