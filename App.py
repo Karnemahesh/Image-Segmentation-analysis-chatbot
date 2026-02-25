@@ -2,7 +2,10 @@ import streamlit as st
 import requests
 import io
 
-st.set_page_config(page_title="Multi-Image Chat (HuggingFace)", layout="wide")
+st.set_page_config(
+    page_title="Multi-Image Chat (HuggingFace)",
+    layout="wide"
+)
 
 # ---------- READ HF API KEY ----------
 try:
@@ -12,7 +15,11 @@ except KeyError:
     st.stop()
 
 API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
-headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+
+headers = {
+    "Authorization": f"Bearer {HF_API_KEY}",
+    "Content-Type": "application/octet-stream"
+}
 
 # ---------- SESSION STATE ----------
 if "images" not in st.session_state:
@@ -21,15 +28,43 @@ if "images" not in st.session_state:
 if "active_image" not in st.session_state:
     st.session_state.active_image = None
 
-# ---------- IMAGE DESCRIPTION ----------
+# ---------- SAFE IMAGE DESCRIPTION ----------
 def describe_image(image_bytes):
-    response = requests.post(API_URL, headers=headers, data=image_bytes)
-    result = response.json()
+    try:
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            data=image_bytes,
+            timeout=30
+        )
 
-    if isinstance(result, list):
-        return result[0]["generated_text"]
-    else:
-        return "Error generating description."
+        # If model is loading
+        if response.status_code == 503:
+            return "⏳ Model is loading... Please try again in a few seconds."
+
+        # If rate limited or error
+        if response.status_code != 200:
+            return f"❌ API Error {response.status_code}: {response.text}"
+
+        try:
+            result = response.json()
+        except Exception:
+            return "❌ Invalid response received from API."
+
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get("generated_text", "No description generated.")
+
+        if isinstance(result, dict) and "error" in result:
+            return f"⚠️ {result['error']}"
+
+        return "⚠️ Unexpected API response."
+
+    except requests.exceptions.Timeout:
+        return "⏰ Request timed out. Please try again."
+
+    except requests.exceptions.RequestException as e:
+        return f"❌ Network error: {str(e)}"
+
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
@@ -44,21 +79,27 @@ with st.sidebar:
     if uploaded_files:
         for file in uploaded_files:
             img_bytes = file.read()
-            description = describe_image(img_bytes)
 
-            st.session_state.images.append({
-                "name": file.name,
-                "data": img_bytes,
-                "description": description
-            })
+            # Avoid duplicate uploads
+            if not any(img["name"] == file.name for img in st.session_state.images):
 
-            st.session_state.active_image = len(st.session_state.images) - 1
+                with st.spinner("Generating description..."):
+                    description = describe_image(img_bytes)
+
+                st.session_state.images.append({
+                    "name": file.name,
+                    "data": img_bytes,
+                    "description": description
+                })
+
+                st.session_state.active_image = len(st.session_state.images) - 1
 
     st.markdown("### 🖼 Uploaded Images")
 
     for idx, img in enumerate(st.session_state.images):
         if st.button(img["name"], key=f"img-{idx}"):
             st.session_state.active_image = idx
+
 
 # ---------- MAIN ----------
 st.title("🖼 Image Description App (Free Hugging Face API)")
@@ -74,4 +115,3 @@ if st.session_state.active_image is not None:
     with col2:
         st.subheader("Generated Description")
         st.write(img_obj["description"])
-
